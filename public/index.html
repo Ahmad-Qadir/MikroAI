@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>MikroAI Chat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body,
+    html {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #chat {
+      overflow-y: auto;
+      flex-grow: 1;
+      padding: 1rem;
+    }
+
+    .message {
+      max-width: 70%;
+      padding: 0.75rem 1rem;
+      border-radius: 0.75rem;
+      margin-bottom: 0.5rem;
+      word-wrap: break-word;
+    }
+
+    .user {
+      align-self: end;
+      background-color: #d1e7ff;
+    }
+
+    .bot {
+      align-self: start;
+      background-color: #e0ffe0;
+    }
+
+    .code-container {
+      position: relative;
+      margin: 10px 0;
+    }
+
+    .bot pre {
+      background: #f0f0f0;
+      padding: 10px;
+      border-radius: 5px;
+      overflow-x: auto;
+      margin: 0;
+    }
+
+    .run-code-btn {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      background: #198754;
+      color: white;
+      border: none;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 0.8em;
+    }
+  </style>
+</head>
+
+<body class="d-flex flex-column h-100 bg-light">
+  <div class="alert alert-info border-bottom border-primary rounded-0 mb-0" role="alert">
+    <h5 class="mb-2"><strong>⚙️ Configuration Tips</strong></h5>
+    <ul class="mb-0">
+      <li>🔒 The backend does not store memory, so <strong>IP, username, and password must be hardcoded</strong>.</li>
+      <li>🔑 The API key must be generated using the <strong>Gemini 2.0 Flash model</strong>.</li>
+      <li>🤖 This system uses the <strong>free version of the Gemini model</strong>.</li>
+      <li>🌐 Replace <code>localhost</code> with the actual backend IP/hostname based on your deployment.</li>
+    </ul>
+  </div>
+
+  <div id="chat" class="d-flex flex-column container-fluid"></div>
+
+  <div class="border-top bg-white p-3 d-flex align-items-center">
+    <input type="text" id="input" class="form-control me-2" placeholder="Type command...">
+    <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+  </div>
+
+  <!-- Socket.io -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const chat = document.getElementById('chat');
+    const input = document.getElementById('input');
+
+    window.executeCode = function (code) {
+      fetch('http://localhost/operate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code.trim() })
+      })
+        .then(res => res.json())
+        .then(data => addMessage(`Result: ${data.result}`, 'bot'))
+        .catch(err => addMessage(`Error: ${err.message}`, 'bot'));
+    };
+
+    function formatBotResponse(text) {
+      let html = text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/^\s*\*\s(.*)$/gm, '<li>$1</li>')
+        .replace(/\n/g, '<br>');
+
+      html = html.replace(/```([\s\S]*?)```/g, (match, code) => {
+        const escapedCode = code
+          .replace(/\\/g, '\\\\')
+          .replace(/'/g, "\\'")
+          .replace(/"/g, '\\"')
+          .replace(/\n/g, '\\n');
+        return `
+          <div class="code-container">
+            <pre><code>${code}</code></pre>
+            <button class="run-code-btn" onclick="executeCode('${escapedCode}')">Run</button>
+          </div>
+        `;
+      });
+
+      if (html.includes('<li>')) {
+        html = html.replace(/(<li>.*?<\/li>)+/g, '<ul>$&</ul>');
+      }
+
+      return html;
+    }
+
+    function addMessage(text, sender) {
+      const div = document.createElement('div');
+      div.className = `message ${sender} d-inline-block`;
+      div.innerHTML = sender === 'bot' ? formatBotResponse(text) : text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function sendMessage() {
+      const msg = input.value.trim();
+      if (!msg) return;
+      addMessage(msg, 'user');
+      socket.emit('userMessage', msg);
+      input.value = '';
+      input.focus();
+    }
+
+    socket.on('botReply', (text) => {
+      addMessage(text, 'bot');
+    });
+
+    input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+  </script>
+
+  <!-- Bootstrap 5 JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>
